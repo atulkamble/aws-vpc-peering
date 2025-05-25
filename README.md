@@ -124,5 +124,27 @@ aws ec2 delete-vpc --vpc-id <vpc-b-id>
 |   EC2-A        |                   |   EC2-B        |
 +----------------+                   +----------------+
 ```
+# steps to perform
+```
 
+VPC Peering Connection 
+
+1) Create VPC A | 10.0.0.0/16
+2) Create VPC B | 10.1.0.0/32
+3) Create Peering Connection 
+4) Accept Peering Connection 
+5) Launch instance A to VPC A (Public Subnet with internet gateway) | SG - 22
+6) Launch instance B to VPC B (Private Subnet) | SG 22
+7) Connect instance A - SSH 
+ping 
+ssh -i mykey userB@private-ip
+8) Suceesful Connection 
+
+touch mykey.pem
+chmod 400 mykey.pem
+
+ssh -i mykey.pem ec2-user@10.1.0.10
+
+
+```
 ---
