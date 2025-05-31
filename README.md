@@ -132,7 +132,11 @@ VPC Peering Connection
 1) Create VPC A | 10.0.0.0/16
 2) Create VPC B | 10.1.0.0/32
 3) Create Peering Connection 
-4) Accept Peering Connection 
+4) Accept Peering Connection
+5) Edit Route Table A 
+Add B details and Peering Connection ID
+6) Edit Route Table B 
+Add A details and Peering Connection ID
 5) Launch instance A to VPC A (Public Subnet with internet gateway) | SG - 22
 6) Launch instance B to VPC B (Private Subnet) | SG 22
 7) Connect instance A - SSH 
