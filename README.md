@@ -142,7 +142,12 @@ Add A details and Peering Connection ID
 7) Connect instance A - SSH 
 ping 
 ssh -i mykey userB@private-ip
-8) Suceesful Connection 
+8) Suceesful Connection
+
+9) Deletion
+delete instances
+delete peering connection 
+delete vpc 
 
 touch mykey.pem
 chmod 400 mykey.pem
