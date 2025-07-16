@@ -9,6 +9,9 @@
 ---
 
 ```
+sudo yum install git
+git clone https://github.com/atulkamble/aws-vpc-peering.git
+cd aws-vpc-peering
 aws ec2 create-key-pair --key-name my-key --query 'KeyMaterial' --output text > my-key.pem
 chmod 400 my-key.pem
 ```
