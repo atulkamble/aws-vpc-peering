@@ -71,7 +71,7 @@ resource "aws_route_table_association" "rta_b" {
   route_table_id = aws_route_table.rt_b.id
 }
 
-# Security Groups
+# Security Group for VPC A
 resource "aws_security_group" "sg_common" {
   name   = "allow-ssh-ping"
   vpc_id = aws_vpc.vpc_a.id
@@ -81,7 +81,7 @@ resource "aws_security_group" "sg_common" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8", "10.1.0.0/8"]
+    cidr_blocks = ["10.0.0.0/8"]
   }
 
   ingress {
@@ -89,7 +89,7 @@ resource "aws_security_group" "sg_common" {
     from_port   = -1
     to_port     = -1
     protocol    = "icmp"
-    cidr_blocks = ["10.0.0.0/8", "10.1.0.0/8"]
+    cidr_blocks = ["10.0.0.0/8"]
   }
 
   egress {
@@ -102,6 +102,7 @@ resource "aws_security_group" "sg_common" {
   tags = { Name = "Allow-Internal-Traffic" }
 }
 
+# Security Group for VPC B
 resource "aws_security_group" "sg_common_b" {
   name   = "allow-ssh-ping-b"
   vpc_id = aws_vpc.vpc_b.id
@@ -111,7 +112,7 @@ resource "aws_security_group" "sg_common_b" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8", "10.1.0.0/8"]
+    cidr_blocks = ["10.0.0.0/8"]
   }
 
   ingress {
@@ -119,7 +120,7 @@ resource "aws_security_group" "sg_common_b" {
     from_port   = -1
     to_port     = -1
     protocol    = "icmp"
-    cidr_blocks = ["10.0.0.0/8", "10.1.0.0/8"]
+    cidr_blocks = ["10.0.0.0/8"]
   }
 
   egress {
