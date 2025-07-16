@@ -11,7 +11,11 @@
 ```
 aws ec2 create-key-pair --key-name my-key --query 'KeyMaterial' --output text > my-key.pem
 chmod 400 my-key.pem
+```
 
+// copy files 
+```
+scp -i my-key.pem -r /Users/atul/Downloads/AWS-VPC-Peering-Project ec2-user@204.236.200.28:/home/ec2-user/
 ```
 
 ## 🎯 **Objective:**
