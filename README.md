@@ -8,6 +8,12 @@
 
 ---
 
+```
+aws ec2 create-key-pair --key-name my-key --query 'KeyMaterial' --output text > my-key.pem
+chmod 400 my-key.pem
+
+```
+
 ## 🎯 **Objective:**
 
 To create a secure VPC peering connection between two different VPCs in the same AWS region and route traffic privately between their EC2 instances.
