@@ -2,7 +2,6 @@ provider "aws" {
   region = var.region
 }
 
-# Get your public IP to allow SSH access
 data "http" "my_ip" {
   url = "https://checkip.amazonaws.com/"
 }
@@ -10,14 +9,14 @@ data "http" "my_ip" {
 # -------------------- VPC A --------------------
 resource "aws_vpc" "vpc_a" {
   cidr_block = "10.0.0.0/16"
-  tags = { Name = "VPC-A" }
+  tags       = { Name = "VPC-A" }
 }
 
 resource "aws_subnet" "subnet_a" {
-  vpc_id     = aws_vpc.vpc_a.id
-  cidr_block = "10.0.1.0/24"
+  vpc_id            = aws_vpc.vpc_a.id
+  cidr_block        = "10.0.1.0/24"
   availability_zone = var.az
-  tags = { Name = "Subnet-A" }
+  tags              = { Name = "Subnet-A" }
 }
 
 resource "aws_internet_gateway" "igw_a" {
@@ -42,14 +41,14 @@ resource "aws_route_table_association" "rta_a" {
 # -------------------- VPC B --------------------
 resource "aws_vpc" "vpc_b" {
   cidr_block = "10.1.0.0/16"
-  tags = { Name = "VPC-B" }
+  tags       = { Name = "VPC-B" }
 }
 
 resource "aws_subnet" "subnet_b" {
-  vpc_id     = aws_vpc.vpc_b.id
-  cidr_block = "10.1.1.0/24"
+  vpc_id            = aws_vpc.vpc_b.id
+  cidr_block        = "10.1.1.0/24"
   availability_zone = var.az
-  tags = { Name = "Subnet-B" }
+  tags              = { Name = "Subnet-B" }
 }
 
 resource "aws_internet_gateway" "igw_b" {
@@ -73,10 +72,10 @@ resource "aws_route_table_association" "rta_b" {
 
 # -------------------- VPC Peering --------------------
 resource "aws_vpc_peering_connection" "peer" {
-  vpc_id        = aws_vpc.vpc_a.id
-  peer_vpc_id   = aws_vpc.vpc_b.id
-  auto_accept   = true
-  tags = { Name = "VPC-A-to-VPC-B" }
+  vpc_id      = aws_vpc.vpc_a.id
+  peer_vpc_id = aws_vpc.vpc_b.id
+  auto_accept = true
+  tags        = { Name = "VPC-A-to-VPC-B" }
 }
 
 resource "aws_route" "route_to_b" {
@@ -91,9 +90,9 @@ resource "aws_route" "route_to_a" {
   vpc_peering_connection_id = aws_vpc_peering_connection.peer.id
 }
 
-# -------------------- Security Groups --------------------
+# -------------------- Security Group for EC2-A --------------------
 resource "aws_security_group" "sg_common" {
-  name   = "allow-ssh-ping"
+  name   = "sg-vpc-a"
   vpc_id = aws_vpc.vpc_a.id
 
   ingress {
@@ -105,7 +104,7 @@ resource "aws_security_group" "sg_common" {
   }
 
   ingress {
-    description = "Ping from internal VPC"
+    description = "ICMP from internal VPC"
     from_port   = -1
     to_port     = -1
     protocol    = "icmp"
@@ -122,20 +121,21 @@ resource "aws_security_group" "sg_common" {
   tags = { Name = "SG-VPC-A" }
 }
 
+# -------------------- Security Group for EC2-B (Fixed for Peering SSH) --------------------
 resource "aws_security_group" "sg_common_b" {
-  name   = "allow-ssh-ping-b"
+  name   = "sg-vpc-b"
   vpc_id = aws_vpc.vpc_b.id
 
   ingress {
-    description = "SSH from your IP"
+    description = "SSH from VPC-A"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
+    cidr_blocks = ["10.0.0.0/16"] # ✅ Fixed to allow internal SSH
   }
 
   ingress {
-    description = "Ping from internal VPC"
+    description = "ICMP from internal VPC"
     from_port   = -1
     to_port     = -1
     protocol    = "icmp"
@@ -160,7 +160,7 @@ resource "aws_instance" "ec2_a" {
   vpc_security_group_ids      = [aws_security_group.sg_common.id]
   associate_public_ip_address = true
   key_name                    = var.key_name
-  tags = { Name = "EC2-A" }
+  tags                        = { Name = "EC2-A" }
 }
 
 resource "aws_instance" "ec2_b" {
@@ -170,5 +170,5 @@ resource "aws_instance" "ec2_b" {
   vpc_security_group_ids      = [aws_security_group.sg_common_b.id]
   associate_public_ip_address = true
   key_name                    = var.key_name
-  tags = { Name = "EC2-B" }
+  tags                        = { Name = "EC2-B" }
 }
