@@ -13,6 +13,45 @@ sudo yum install git
 git clone https://github.com/atulkamble/aws-vpc-peering.git
 cd aws-vpc-peering
 ```
+# info after provision 
+```
+atul@MacBook terraform % ls
+key.pem			terraform.tfstate
+main.tf			variables.tf
+outputs.tf
+
+atul@MacBook terraform % tree
+.
+├── key.pem
+├── main.tf
+├── outputs.tf
+├── terraform.tfstate
+└── variables.tf
+```
+# Outputs:
+
+```
+ssh_private_key_path = "./key.pem"
+vm1_private_ip = "10.0.1.123"
+vm1_public_ip = "18.212.127.3"
+vm2_private_ip = "10.1.1.30"
+vm2_public_ip = "54.197.23.222"
+```
+
+# copy key.pem to vm1
+```
+scp -i key.pem /Users/atul/Downloads/aws-vpc-peering/terraform/key.pem ec2-user@18.212.127.3://home/ec2-user
+
+ls
+
+```
+
+# connect vm2 instance privately 
+```
+chmod 400 key.pem
+ssh -i "key.pem" ec2-user@10.1.1.30
+exit
+```
 # main.tf 
 ```
 provider "aws" {
