@@ -2,7 +2,7 @@ provider "aws" {
   region = var.region
 }
 
-# Get your public IP dynamically
+# Get your public IP to allow SSH access
 data "http" "my_ip" {
   url = "https://checkip.amazonaws.com/"
 }
@@ -97,13 +97,15 @@ resource "aws_security_group" "sg_common" {
   vpc_id = aws_vpc.vpc_a.id
 
   ingress {
+    description = "SSH from your IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [chomp(data.http.my_ip.body) + "/32"]
+    cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
   }
 
   ingress {
+    description = "Ping from internal VPC"
     from_port   = -1
     to_port     = -1
     protocol    = "icmp"
@@ -117,7 +119,7 @@ resource "aws_security_group" "sg_common" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "Allow-Internal" }
+  tags = { Name = "SG-VPC-A" }
 }
 
 resource "aws_security_group" "sg_common_b" {
@@ -125,13 +127,15 @@ resource "aws_security_group" "sg_common_b" {
   vpc_id = aws_vpc.vpc_b.id
 
   ingress {
+    description = "SSH from your IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [chomp(data.http.my_ip.body) + "/32"]
+    cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
   }
 
   ingress {
+    description = "Ping from internal VPC"
     from_port   = -1
     to_port     = -1
     protocol    = "icmp"
@@ -145,7 +149,7 @@ resource "aws_security_group" "sg_common_b" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "Allow-Internal-B" }
+  tags = { Name = "SG-VPC-B" }
 }
 
 # -------------------- EC2 Instances --------------------
