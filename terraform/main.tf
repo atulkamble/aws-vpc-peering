@@ -1,203 +1,188 @@
 provider "aws" {
-  region = "us-east-1"
+  region = var.region
 }
 
-# Get your public IP
-data "http" "my_ip" {
-  url = "https://checkip.amazonaws.com"
+# Generate key pair
+resource "tls_private_key" "key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
 }
 
-# Create Key Pair from local public key
-resource "aws_key_pair" "deployer" {
-  key_name   = "my-key"
-  public_key = file("/Users/atul/.ssh/my-key.pub")  # ✅ Absolute path
+resource "aws_key_pair" "deployer_key" {
+  key_name   = var.key_name
+  public_key = tls_private_key.key.public_key_openssh
 }
 
-# VPC A
-resource "aws_vpc" "vpc_a" {
-  cidr_block = "10.0.0.0/16"
-  tags = {
-    Name = "VPC-A"
+resource "local_file" "private_key" {
+  content          = tls_private_key.key.private_key_pem
+  filename         = "${path.module}/key.pem"
+  file_permission  = "0400"
+}
+
+# VPC1
+resource "aws_vpc" "vpc1" {
+  cidr_block = var.vpc1_cidr
+}
+
+resource "aws_subnet" "subnet1" {
+  vpc_id            = aws_vpc.vpc1.id
+  cidr_block        = var.subnet1_cidr
+  availability_zone = var.availability_zone
+}
+
+resource "aws_internet_gateway" "igw1" {
+  vpc_id = aws_vpc.vpc1.id
+}
+
+resource "aws_route_table" "rt1" {
+  vpc_id = aws_vpc.vpc1.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw1.id
   }
 }
 
-# VPC B
-resource "aws_vpc" "vpc_b" {
-  cidr_block = "10.1.0.0/16"
-  tags = {
-    Name = "VPC-B"
+resource "aws_route_table_association" "rta1" {
+  subnet_id      = aws_subnet.subnet1.id
+  route_table_id = aws_route_table.rt1.id
+}
+
+resource "aws_security_group" "sg1" {
+  name        = "sg1"
+  description = "Allow SSH & ICMP from VPC2"
+  vpc_id      = aws_vpc.vpc1.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = [var.vpc2_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-# Internet Gateways
-resource "aws_internet_gateway" "igw_a" {
-  vpc_id = aws_vpc.vpc_a.id
+# VPC2
+resource "aws_vpc" "vpc2" {
+  cidr_block = var.vpc2_cidr
 }
 
-resource "aws_internet_gateway" "igw_b" {
-  vpc_id = aws_vpc.vpc_b.id
+resource "aws_subnet" "subnet2" {
+  vpc_id            = aws_vpc.vpc2.id
+  cidr_block        = var.subnet2_cidr
+  availability_zone = var.availability_zone
 }
 
-# Subnets
-resource "aws_subnet" "subnet_a" {
-  vpc_id                  = aws_vpc.vpc_a.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-east-1a"
+resource "aws_internet_gateway" "igw2" {
+  vpc_id = aws_vpc.vpc2.id
 }
 
-resource "aws_subnet" "subnet_b" {
-  vpc_id                  = aws_vpc.vpc_b.id
-  cidr_block              = "10.1.1.0/24"
-  availability_zone       = "us-east-1a"
+resource "aws_route_table" "rt2" {
+  vpc_id = aws_vpc.vpc2.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw2.id
+  }
 }
 
-# Route Tables
-resource "aws_route_table" "rt_a" {
-  vpc_id = aws_vpc.vpc_a.id
+resource "aws_route_table_association" "rta2" {
+  subnet_id      = aws_subnet.subnet2.id
+  route_table_id = aws_route_table.rt2.id
 }
 
-resource "aws_route_table" "rt_b" {
-  vpc_id = aws_vpc.vpc_b.id
-}
+resource "aws_security_group" "sg2" {
+  name        = "sg2"
+  description = "Allow SSH & ICMP from VPC1"
+  vpc_id      = aws_vpc.vpc2.id
 
-# Route Table Associations
-resource "aws_route_table_association" "rta_a" {
-  subnet_id      = aws_subnet.subnet_a.id
-  route_table_id = aws_route_table.rt_a.id
-}
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-resource "aws_route_table_association" "rta_b" {
-  subnet_id      = aws_subnet.subnet_b.id
-  route_table_id = aws_route_table.rt_b.id
+  ingress {
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = [var.vpc1_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
 # VPC Peering
 resource "aws_vpc_peering_connection" "peer" {
-  vpc_id        = aws_vpc.vpc_a.id
-  peer_vpc_id   = aws_vpc.vpc_b.id
+  vpc_id        = aws_vpc.vpc1.id
+  peer_vpc_id   = aws_vpc.vpc2.id
   auto_accept   = true
-  tags = {
-    Name = "A-to-B"
+}
+
+resource "aws_route" "peer_route1" {
+  route_table_id             = aws_route_table.rt1.id
+  destination_cidr_block     = var.vpc2_cidr
+  vpc_peering_connection_id  = aws_vpc_peering_connection.peer.id
+}
+
+resource "aws_route" "peer_route2" {
+  route_table_id             = aws_route_table.rt2.id
+  destination_cidr_block     = var.vpc1_cidr
+  vpc_peering_connection_id  = aws_vpc_peering_connection.peer.id
+}
+
+# AMI
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
   }
 }
 
-# Routes for VPC Peering
-resource "aws_route" "route_to_b" {
-  route_table_id         = aws_route_table.rt_a.id
-  destination_cidr_block = aws_vpc.vpc_b.cidr_block
-  vpc_peering_connection_id = aws_vpc_peering_connection.peer.id
-}
-
-resource "aws_route" "route_to_a" {
-  route_table_id         = aws_route_table.rt_b.id
-  destination_cidr_block = aws_vpc.vpc_a.cidr_block
-  vpc_peering_connection_id = aws_vpc_peering_connection.peer.id
-}
-
-# Default Routes
-resource "aws_route" "default_igw_route_a" {
-  route_table_id         = aws_route_table.rt_a.id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.igw_a.id
-}
-
-resource "aws_route" "default_igw_route_b" {
-  route_table_id         = aws_route_table.rt_b.id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.igw_b.id
-}
-
-# Security Group A
-resource "aws_security_group" "sg_common" {
-  name        = "vpc-a-sg"
-  description = "Allow SSH & ICMP"
-  vpc_id      = aws_vpc.vpc_a.id
-
-  ingress {
-    description = "SSH from your IP"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [chomp(data.http.my_ip.response_body) + "/32"]
-  }
-
-  ingress {
-    description = "ICMP from internal VPC"
-    from_port   = -1
-    to_port     = -1
-    protocol    = "icmp"
-    cidr_blocks = ["10.0.0.0/8"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+# EC2 Instance in VPC1
+resource "aws_instance" "vm1" {
+  ami                         = data.aws_ami.amazon_linux.id
+  instance_type               = var.instance_type
+  subnet_id                   = aws_subnet.subnet1.id
+  key_name                    = aws_key_pair.deployer_key.key_name
+  vpc_security_group_ids      = [aws_security_group.sg1.id]
 
   tags = {
-    Name = "SG-VPC-A"
+    Name = "VM1"
   }
 }
 
-# Security Group B
-resource "aws_security_group" "sg_common_b" {
-  name        = "vpc-b-sg"
-  description = "Allow SSH & ICMP"
-  vpc_id      = aws_vpc.vpc_b.id
-
-  ingress {
-    description = "SSH from VPC A"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
-  }
-
-  ingress {
-    description = "ICMP from internal VPC"
-    from_port   = -1
-    to_port     = -1
-    protocol    = "icmp"
-    cidr_blocks = ["10.0.0.0/8"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+# EC2 Instance in VPC2
+resource "aws_instance" "vm2" {
+  ami                         = data.aws_ami.amazon_linux.id
+  instance_type               = var.instance_type
+  subnet_id                   = aws_subnet.subnet2.id
+  key_name                    = aws_key_pair.deployer_key.key_name
+  vpc_security_group_ids      = [aws_security_group.sg2.id]
 
   tags = {
-    Name = "SG-VPC-B"
-  }
-}
-
-# EC2 Instances
-resource "aws_instance" "ec2_a" {
-  ami                         = "ami-0c02fb55956c7d316" # Amazon Linux 2 AMI
-  instance_type               = "t2.micro"
-  subnet_id                   = aws_subnet.subnet_a.id
-  vpc_security_group_ids      = [aws_security_group.sg_common.id]
-  key_name                    = aws_key_pair.deployer.key_name
-  associate_public_ip_address = true
-
-  tags = {
-    Name = "EC2-A"
-  }
-}
-
-resource "aws_instance" "ec2_b" {
-  ami                         = "ami-0c02fb55956c7d316"
-  instance_type               = "t2.micro"
-  subnet_id                   = aws_subnet.subnet_b.id
-  vpc_security_group_ids      = [aws_security_group.sg_common_b.id]
-  key_name                    = aws_key_pair.deployer.key_name
-  associate_public_ip_address = true
-
-  tags = {
-    Name = "EC2-B"
+    Name = "VM2"
   }
 }
