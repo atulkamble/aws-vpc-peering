@@ -11,7 +11,11 @@ variable "instance_type" {
 }
 
 variable "ami_id" {
-  description = "Amazon Linux 2 AMI for us-east-1"
-  default     = "ami-0c02fb55956c7d316"
+  description = "Amazon Linux 2 AMI"
+  default     = "ami-0c02fb55956c7d316" # Update as needed
 }
 
+variable "key_name" {
+  description = "Name of the EC2 key pair to use for SSH"
+  default     = "my-key" # <-- Change to your actual AWS key name
+}
