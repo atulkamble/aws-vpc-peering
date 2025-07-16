@@ -16,6 +16,6 @@ variable "ami_id" {
 }
 
 variable "key_name" {
-  description = "Name of the EC2 key pair for SSH access"
-  default     = "my-key" # <-- Replace with your actual key name
+  description = "EC2 key pair name"
+  default     = "my-key"
 }
