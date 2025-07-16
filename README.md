@@ -70,9 +70,9 @@ resource "aws_key_pair" "deployer_key" {
 }
 
 resource "local_file" "private_key" {
-  content          = tls_private_key.key.private_key_pem
-  filename         = "${path.module}/key.pem"
-  file_permission  = "0400"
+  content         = tls_private_key.key.private_key_pem
+  filename        = "${path.module}/key.pem"
+  file_permission = "0400"
 }
 
 # VPC1
@@ -84,6 +84,7 @@ resource "aws_subnet" "subnet1" {
   vpc_id            = aws_vpc.vpc1.id
   cidr_block        = var.subnet1_cidr
   availability_zone = var.availability_zone
+  map_public_ip_on_launch = true
 }
 
 resource "aws_internet_gateway" "igw1" {
@@ -140,6 +141,7 @@ resource "aws_subnet" "subnet2" {
   vpc_id            = aws_vpc.vpc2.id
   cidr_block        = var.subnet2_cidr
   availability_zone = var.availability_zone
+  map_public_ip_on_launch = true
 }
 
 resource "aws_internet_gateway" "igw2" {
@@ -189,9 +191,9 @@ resource "aws_security_group" "sg2" {
 
 # VPC Peering
 resource "aws_vpc_peering_connection" "peer" {
-  vpc_id        = aws_vpc.vpc1.id
-  peer_vpc_id   = aws_vpc.vpc2.id
-  auto_accept   = true
+  vpc_id       = aws_vpc.vpc1.id
+  peer_vpc_id  = aws_vpc.vpc2.id
+  auto_accept  = true
 }
 
 resource "aws_route" "peer_route1" {
@@ -224,6 +226,7 @@ resource "aws_instance" "vm1" {
   subnet_id                   = aws_subnet.subnet1.id
   key_name                    = aws_key_pair.deployer_key.key_name
   vpc_security_group_ids      = [aws_security_group.sg1.id]
+  associate_public_ip_address = true
 
   tags = {
     Name = "VM1"
@@ -237,6 +240,7 @@ resource "aws_instance" "vm2" {
   subnet_id                   = aws_subnet.subnet2.id
   key_name                    = aws_key_pair.deployer_key.key_name
   vpc_security_group_ids      = [aws_security_group.sg2.id]
+  associate_public_ip_address = true
 
   tags = {
     Name = "VM2"
