@@ -6,7 +6,7 @@ data "http" "my_ip" {
   url = "https://checkip.amazonaws.com/"
 }
 
-# -------------------- VPC A --------------------
+# ---------------- VPC A ----------------
 resource "aws_vpc" "vpc_a" {
   cidr_block = "10.0.0.0/16"
   tags       = { Name = "VPC-A" }
@@ -38,7 +38,7 @@ resource "aws_route_table_association" "rta_a" {
   route_table_id = aws_route_table.rt_a.id
 }
 
-# -------------------- VPC B --------------------
+# ---------------- VPC B ----------------
 resource "aws_vpc" "vpc_b" {
   cidr_block = "10.1.0.0/16"
   tags       = { Name = "VPC-B" }
@@ -70,12 +70,12 @@ resource "aws_route_table_association" "rta_b" {
   route_table_id = aws_route_table.rt_b.id
 }
 
-# -------------------- VPC Peering --------------------
+# ---------------- Peering ----------------
 resource "aws_vpc_peering_connection" "peer" {
   vpc_id      = aws_vpc.vpc_a.id
   peer_vpc_id = aws_vpc.vpc_b.id
   auto_accept = true
-  tags        = { Name = "VPC-A-to-VPC-B" }
+  tags        = { Name = "A-to-B" }
 }
 
 resource "aws_route" "route_to_b" {
@@ -90,9 +90,9 @@ resource "aws_route" "route_to_a" {
   vpc_peering_connection_id = aws_vpc_peering_connection.peer.id
 }
 
-# -------------------- Security Group for EC2-A --------------------
+# ---------------- Security Group for VPC A ----------------
 resource "aws_security_group" "sg_common" {
-  name   = "sg-vpc-a"
+  name   = "vpc-a-sg"
   vpc_id = aws_vpc.vpc_a.id
 
   ingress {
@@ -121,17 +121,17 @@ resource "aws_security_group" "sg_common" {
   tags = { Name = "SG-VPC-A" }
 }
 
-# -------------------- Security Group for EC2-B (Fixed for Peering SSH) --------------------
+# ---------------- Security Group for VPC B (allows private SSH from A) ----------------
 resource "aws_security_group" "sg_common_b" {
-  name   = "sg-vpc-b"
+  name   = "vpc-b-sg"
   vpc_id = aws_vpc.vpc_b.id
 
   ingress {
-    description = "SSH from VPC-A"
+    description = "SSH from VPC A"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"] # ✅ Fixed to allow internal SSH
+    cidr_blocks = ["10.0.0.0/16"] # ✅ Allow internal SSH
   }
 
   ingress {
@@ -152,7 +152,7 @@ resource "aws_security_group" "sg_common_b" {
   tags = { Name = "SG-VPC-B" }
 }
 
-# -------------------- EC2 Instances --------------------
+# ---------------- EC2 Instances ----------------
 resource "aws_instance" "ec2_a" {
   ami                         = var.ami_id
   instance_type               = var.instance_type
