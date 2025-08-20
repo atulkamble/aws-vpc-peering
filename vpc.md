@@ -110,6 +110,25 @@ aws ec2 create-route --route-table-id rtb-id-private --destination-cidr-block 0.
 aws ec2 associate-route-table --route-table-id rtb-id-
 ```
 
+default vpc 
+id - vpc-09683ff71eaaac232
+
+subnet-0f135e475d49526d6 172.31.80.0/20
+subnet-08e90dc974d3fc8b1 172.31.64.0/20
+
+// copy instance private ip of 2nd instance
+
+connect to 1st instance 
+
+touch key.pem
+nano key.pem 
+chmod 400 key.pem 
+
+ssh -i key.pem ec2-user@private-ip-of-2nd-instance
+
+example: ssh -i key.pem ec2-user@172.31.72.28
+
+
 
 
 
