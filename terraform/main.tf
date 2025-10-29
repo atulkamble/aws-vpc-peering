@@ -62,6 +62,13 @@ resource "aws_security_group" "sg1" {
   }
 
   ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc2_cidr]
+  }
+
+  ingress {
     from_port   = -1
     to_port     = -1
     protocol    = "icmp"
@@ -116,6 +123,13 @@ resource "aws_security_group" "sg2" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc1_cidr]
   }
 
   ingress {
