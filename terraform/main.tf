@@ -19,9 +19,20 @@ resource "local_file" "private_key" {
   file_permission = "0400"
 }
 
+# Save public key for reference
+resource "local_file" "public_key" {
+  content         = tls_private_key.key.public_key_openssh
+  filename        = "${path.module}/key.pem.pub"
+  file_permission = "0644"
+}
+
 # VPC1
 resource "aws_vpc" "vpc1" {
   cidr_block = var.vpc1_cidr
+
+  tags = {
+    Name = "VPCA"
+  }
 }
 
 resource "aws_subnet" "subnet1" {
@@ -86,6 +97,10 @@ resource "aws_security_group" "sg1" {
 # VPC2
 resource "aws_vpc" "vpc2" {
   cidr_block = var.vpc2_cidr
+
+  tags = {
+    Name = "VPCB"
+  }
 }
 
 resource "aws_subnet" "subnet2" {
@@ -152,6 +167,10 @@ resource "aws_vpc_peering_connection" "peer" {
   vpc_id       = aws_vpc.vpc1.id
   peer_vpc_id  = aws_vpc.vpc2.id
   auto_accept  = true
+
+  tags = {
+    Name = "VPCA-VPCB-Peering"
+  }
 }
 
 resource "aws_route" "peer_route1" {
