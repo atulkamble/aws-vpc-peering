@@ -449,6 +449,27 @@ aws ec2 delete-vpc --vpc-id <vpc-b-id>
 ```
 # steps to perform
 ```
+1. vpcA - Igateway
+2. vpcB - No Igateway
+3. peering - AtoB
+4. RouteA
+5. RouteB
+6. RouteA associate subnetA - public
+7. RouteB associate subnetB - private
+8. Add Rule >> RouteA >>
+VPCB address - peeringConnection
+0.0.0.0/16 - InternetGateway
+9. Add Rule >> RouteB >>
+VPCA address - peeringConnection
+10. VM1 - ssh - public
+ssh -i key username@public-ipVMA
+
+key.pem
+chmod 400 key.pem
+
+11.
+ssh -i key username@private-ipVMB
+
 
 VPC Peering Connection 
 
