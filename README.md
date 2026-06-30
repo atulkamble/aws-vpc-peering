@@ -1,4 +1,48 @@
-**AWS VPC Peering Connection project** with CLI commands, use case, and verification steps. This project helps connect two VPCs so resources in one VPC can communicate with resources in the other using private IPs.
+# AWS VPC Peering
+
+# steps to perform
+### **AWS VPC Peering – Quick Steps**
+
+1. Create **VPC A** (10.0.0.0/16) with an **Internet Gateway**.
+2. Create **VPC B** (10.1.0.0/16) **without** an Internet Gateway.
+3. Create a **VPC Peering Connection** (A ↔ B) and **Accept** it.
+4. Create **Route Table A** and associate it with **Public Subnet A**.
+5. Create **Route Table B** and associate it with **Private Subnet B**.
+6. Update **Route Table A**:
+
+   * `10.1.0.0/16` → **Peering Connection**
+   * `0.0.0.0/0` → **Internet Gateway**
+7. Update **Route Table B**:
+
+   * `10.0.0.0/16` → **Peering Connection**
+8. Launch **VM A** in **Public Subnet** (SSH allowed).
+9. Launch **VM B** in **Private Subnet** (SSH allowed from VPC A).
+10. Connect to **VM A**:
+
+```bash
+chmod 400 mykey.pem
+ssh -i mykey.pem ec2-user@<VMA-Public-IP>
+```
+
+11. From **VM A**, connect to **VM B**:
+
+```bash
+ssh -i mykey.pem ec2-user@<VMB-Private-IP>
+```
+
+12. Verify connectivity:
+
+```bash
+ping <VMB-Private-IP>
+```
+
+### **Cleanup**
+
+1. Terminate EC2 instances.
+2. Delete the VPC Peering Connection.
+3. Delete the VPCs.
+4. Delete remaining networking resources (Route Tables, Internet Gateway, Subnets, Security Groups if required).
+---
 
 ---
 
@@ -447,51 +491,7 @@ aws ec2 delete-vpc --vpc-id <vpc-b-id>
 |   EC2-A        |                   |   EC2-B        |
 +----------------+                   +----------------+
 ```
-# steps to perform
-### **AWS VPC Peering – Quick Steps**
 
-1. Create **VPC A** (10.0.0.0/16) with an **Internet Gateway**.
-2. Create **VPC B** (10.1.0.0/16) **without** an Internet Gateway.
-3. Create a **VPC Peering Connection** (A ↔ B) and **Accept** it.
-4. Create **Route Table A** and associate it with **Public Subnet A**.
-5. Create **Route Table B** and associate it with **Private Subnet B**.
-6. Update **Route Table A**:
-
-   * `10.1.0.0/16` → **Peering Connection**
-   * `0.0.0.0/0` → **Internet Gateway**
-7. Update **Route Table B**:
-
-   * `10.0.0.0/16` → **Peering Connection**
-8. Launch **VM A** in **Public Subnet** (SSH allowed).
-9. Launch **VM B** in **Private Subnet** (SSH allowed from VPC A).
-10. Connect to **VM A**:
-
-```bash
-chmod 400 mykey.pem
-ssh -i mykey.pem ec2-user@<VMA-Public-IP>
-```
-
-11. From **VM A**, connect to **VM B**:
-
-```bash
-ssh -i mykey.pem ec2-user@<VMB-Private-IP>
-```
-
-12. Verify connectivity:
-
-```bash
-ping <VMB-Private-IP>
-```
-
-### **Cleanup**
-
-1. Terminate EC2 instances.
-2. Delete the VPC Peering Connection.
-3. Delete the VPCs.
-4. Delete remaining networking resources (Route Tables, Internet Gateway, Subnets, Security Groups if required).
-
----
----
 ## 👨‍💻 Author
 
 **Atul Kamble**
