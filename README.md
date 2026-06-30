@@ -448,57 +448,48 @@ aws ec2 delete-vpc --vpc-id <vpc-b-id>
 +----------------+                   +----------------+
 ```
 # steps to perform
-```
-1. vpcA - Igateway
-2. vpcB - No Igateway
-3. peering - AtoB
-4. RouteA
-5. RouteB
-6. RouteA associate subnetA - public
-7. RouteB associate subnetB - private
-8. Add Rule >> RouteA >>
-VPCB address - peeringConnection
-0.0.0.0/16 - InternetGateway
-9. Add Rule >> RouteB >>
-VPCA address - peeringConnection
-10. VM1 - ssh - public
-ssh -i key username@public-ipVMA
+### **AWS VPC Peering – Quick Steps**
 
-key.pem
-chmod 400 key.pem
+1. Create **VPC A** (10.0.0.0/16) with an **Internet Gateway**.
+2. Create **VPC B** (10.1.0.0/16) **without** an Internet Gateway.
+3. Create a **VPC Peering Connection** (A ↔ B) and **Accept** it.
+4. Create **Route Table A** and associate it with **Public Subnet A**.
+5. Create **Route Table B** and associate it with **Private Subnet B**.
+6. Update **Route Table A**:
 
-11.
-ssh -i key username@private-ipVMB
+   * `10.1.0.0/16` → **Peering Connection**
+   * `0.0.0.0/0` → **Internet Gateway**
+7. Update **Route Table B**:
 
+   * `10.0.0.0/16` → **Peering Connection**
+8. Launch **VM A** in **Public Subnet** (SSH allowed).
+9. Launch **VM B** in **Private Subnet** (SSH allowed from VPC A).
+10. Connect to **VM A**:
 
-VPC Peering Connection 
-
-1) Create VPC A | 10.0.0.0/16
-2) Create VPC B | 10.1.0.0/32
-3) Create Peering Connection 
-4) Accept Peering Connection
-5) Edit Route Table A 
-Add B details and Peering Connection ID
-6) Edit Route Table B 
-Add A details and Peering Connection ID
-5) Launch instance A to VPC A (Public Subnet with internet gateway) | SG - 22
-6) Launch instance B to VPC B (Private Subnet) | SG 22
-7) Connect instance A - SSH 
-ping 
-ssh -i mykey userB@private-ip
-8) Suceesful Connection
-
-9) Deletion
-delete instances
-delete peering connection 
-delete vpc 
-
-touch mykey.pem
+```bash
 chmod 400 mykey.pem
-
-ssh -i mykey.pem ec2-user@10.1.0.10
-
+ssh -i mykey.pem ec2-user@<VMA-Public-IP>
 ```
+
+11. From **VM A**, connect to **VM B**:
+
+```bash
+ssh -i mykey.pem ec2-user@<VMB-Private-IP>
+```
+
+12. Verify connectivity:
+
+```bash
+ping <VMB-Private-IP>
+```
+
+### **Cleanup**
+
+1. Terminate EC2 instances.
+2. Delete the VPC Peering Connection.
+3. Delete the VPCs.
+4. Delete remaining networking resources (Route Tables, Internet Gateway, Subnets, Security Groups if required).
+
 ---
 ---
 ## 👨‍💻 Author
