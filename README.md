@@ -1,7 +1,6 @@
-# AWS VPC Peering
+# AWS VPC Peering Terraform Project
 
-# steps to perform
-### **AWS VPC Peering – Quick Steps**
+# Manual Steps
 
 1. Create **VPC A** (10.0.0.0/16) with an **Internet Gateway**.
 2. Create **VPC B** (10.1.0.0/16) **without** an Internet Gateway.
