@@ -1,4 +1,4 @@
-# AWS VPC Peering Terraform Project
+# AWS VPC Peering Project
 
 # Manual Steps
 
