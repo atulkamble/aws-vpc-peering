@@ -1,502 +1,104 @@
 # AWS VPC Peering Project
 
-# Manual Steps
+Hands-on AWS VPC peering between two non-overlapping VPCs in the **same AWS Region**, deployed using Terraform.
 
-1. Create **VPC A** (10.0.0.0/16) with an **Internet Gateway**.
-2. Create **VPC B** (10.1.0.0/16) **without** an Internet Gateway.
-3. Create a **VPC Peering Connection** (A ↔ B) and **Accept** it.
-4. Create **Route Table A** and associate it with **Public Subnet A**.
-5. Create **Route Table B** and associate it with **Private Subnet B**.
-6. Update **Route Table A**:
+## Architecture
 
-   * `10.1.0.0/16` → **Peering Connection**
-   * `0.0.0.0/0` → **Internet Gateway**
-7. Update **Route Table B**:
+```text
+Administrator (SSH via public IP; restricted to admin_cidr)
+                     |
+                  Internet
+                     |
+                  IGW-A
+                     |
+VPC-A: 10.0.0.0/16   |        Peering (pcx)       VPC-B: 10.1.0.0/16
++----------------------------+                  +----------------------------+
+| Public subnet 10.0.1.0/24  |                  | Private subnet 10.1.1.0/24 |
+| VM1 Bastion (public IP)    |<--- private ---> | VM2 EC2 (private IP only)  |
+| RT: 0.0.0.0/0 -> IGW       |                  | RT: 10.0.0.0/16 -> pcx     |
+| RT: 10.1.0.0/16 -> pcx     |                  | No IGW/NAT default route   |
++----------------------------+                  +----------------------------+
+```
 
-   * `10.0.0.0/16` → **Peering Connection**
-8. Launch **VM A** in **Public Subnet** (SSH allowed).
-9. Launch **VM B** in **Private Subnet** (SSH allowed from VPC A).
-10. Connect to **VM A**:
+**Goal:** SSH to VM1 using its public IP, then test ping/SSH from VM1 to VM2 using VM2's **private IP** over the VPC peering connection.
+
+## Prerequisites
+
+- AWS account, AWS CLI, Terraform >= 1.5, and SSH.
+- IAM permissions to provision EC2, VPC networking, security groups, and an EC2 key pair.
+- Region `us-east-1` and AZ `us-east-1a` (edit `terraform/variables.tf` if required).
+- Two non-overlapping VPC CIDRs: `10.0.0.0/16` and `10.1.0.0/16`.
+- A unique EC2 `key_name` for this lab.
+- Your own public IPv4 address as `admin_cidr` with `/32` (do not permit `0.0.0.0/0`).
+
+## Deploy
 
 ```bash
-chmod 400 mykey.pem
-ssh -i mykey.pem ec2-user@<VMA-Public-IP>
-```
-
-11. From **VM A**, connect to **VM B**:
-
-```bash
-ssh -i mykey.pem ec2-user@<VMB-Private-IP>
-```
-
-12. Verify connectivity:
-
-```bash
-ping <VMB-Private-IP>
-```
-
-### **Cleanup**
-
-1. Terminate EC2 instances.
-2. Delete the VPC Peering Connection.
-3. Delete the VPCs.
-4. Delete remaining networking resources (Route Tables, Internet Gateway, Subnets, Security Groups if required).
----
-
----
-
-## ✅ **Project Title:**
-
-**Create and Configure VPC Peering between Two VPCs Using AWS CLI**
-
----
-
-```
-sudo yum install git
 git clone https://github.com/atulkamble/aws-vpc-peering.git
-cd aws-vpc-peering
-```
-# info after provision 
-```
-atul@MacBook terraform % ls
-key.pem			terraform.tfstate
-main.tf			variables.tf
-outputs.tf
+cd aws-vpc-peering/terraform
+aws sts get-caller-identity
+terraform init
+terraform fmt -check
+terraform validate
 
-atul@MacBook terraform % tree
-.
-├── key.pem
-├── main.tf
-├── outputs.tf
-├── terraform.tfstate
-└── variables.tf
-```
-# Outputs:
-
-```
-ssh_private_key_path = "./key.pem"
-vm1_private_ip = "10.0.1.123"
-vm1_public_ip = "18.212.127.3"
-vm2_private_ip = "10.1.1.30"
-vm2_public_ip = "54.197.23.222"
+# Replace with YOUR current public IPv4 /32, not a placeholder:
+terraform plan -var='admin_cidr=YOUR_PUBLIC_IPV4/32'
+terraform apply -var='admin_cidr=YOUR_PUBLIC_IPV4/32'
 ```
 
-# copy key.pem to vm1
-```
-scp -i key.pem /Users/atul/Downloads/aws-vpc-peering/terraform/key.pem ec2-user@18.212.127.3://home/ec2-user
+Terraform provisions VPC-A, VPC-B, subnets, one IGW (A only), subnet route tables, a same-account/same-Region peering connection, restrictive security groups, and two Amazon Linux 2023 EC2 instances. **VM2 has no public IP.**
 
-ls
+> The generated `key.pem` and Terraform state contain sensitive private-key material. They must never be committed, uploaded, or shared. For production prefer SSM Session Manager / EC2 Instance Connect Endpoint and externally managed keys.
 
+## Verify AWS resources
+
+```bash
+terraform output
+aws ec2 describe-vpc-peering-connections --vpc-peering-connection-ids "$(terraform output -raw peering_connection_id)" --query 'VpcPeeringConnections[*].Status.Code'
+aws ec2 describe-route-tables --route-table-ids "$(terraform output -raw route_table_a_id)" "$(terraform output -raw route_table_b_id)" --query 'RouteTables[*].Routes[*].{Destination:DestinationCidrBlock,Gateway:GatewayId,Peering:VpcPeeringConnectionId,State:State}' --output json
 ```
 
-# connect vm2 instance privately 
-```
+Expected peering status: `active`. VPC-A must route `10.1.0.0/16` through peering; VPC-B must route `10.0.0.0/16` through peering. VPC-B has no `0.0.0.0/0` route.
+
+## Connectivity tests
+
+Use the local key file and **ProxyJump** so no private key is copied onto VM1.
+
+```bash
+cd terraform                 # Only if currently at the repository root
 chmod 400 key.pem
-ssh -i "key.pem" ec2-user@10.1.1.30
-exit
-```
-# main.tf 
-```
-provider "aws" {
-  region = var.region
-}
+VM1_PUBLIC=$(terraform output -raw vm1_public_ip)
+VM2_PRIVATE=$(terraform output -raw vm2_private_ip)
 
-# Generate key pair
-resource "tls_private_key" "key" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
+# Test ICMP from VM1 to private VM2:
+ssh -i key.pem -o IdentitiesOnly=yes "ec2-user@$VM1_PUBLIC" "ping -c 3 $VM2_PRIVATE"
 
-resource "aws_key_pair" "deployer_key" {
-  key_name   = var.key_name
-  public_key = tls_private_key.key.public_key_openssh
-}
-
-resource "local_file" "private_key" {
-  content         = tls_private_key.key.private_key_pem
-  filename        = "${path.module}/key.pem"
-  file_permission = "0400"
-}
-
-# VPC1
-resource "aws_vpc" "vpc1" {
-  cidr_block = var.vpc1_cidr
-}
-
-resource "aws_subnet" "subnet1" {
-  vpc_id            = aws_vpc.vpc1.id
-  cidr_block        = var.subnet1_cidr
-  availability_zone = var.availability_zone
-  map_public_ip_on_launch = true
-}
-
-resource "aws_internet_gateway" "igw1" {
-  vpc_id = aws_vpc.vpc1.id
-}
-
-resource "aws_route_table" "rt1" {
-  vpc_id = aws_vpc.vpc1.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw1.id
-  }
-}
-
-resource "aws_route_table_association" "rta1" {
-  subnet_id      = aws_subnet.subnet1.id
-  route_table_id = aws_route_table.rt1.id
-}
-
-resource "aws_security_group" "sg1" {
-  name        = "sg1"
-  description = "Allow SSH & ICMP from VPC2"
-  vpc_id      = aws_vpc.vpc1.id
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = -1
-    to_port     = -1
-    protocol    = "icmp"
-    cidr_blocks = [var.vpc2_cidr]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# VPC2
-resource "aws_vpc" "vpc2" {
-  cidr_block = var.vpc2_cidr
-}
-
-resource "aws_subnet" "subnet2" {
-  vpc_id            = aws_vpc.vpc2.id
-  cidr_block        = var.subnet2_cidr
-  availability_zone = var.availability_zone
-  map_public_ip_on_launch = true
-}
-
-resource "aws_internet_gateway" "igw2" {
-  vpc_id = aws_vpc.vpc2.id
-}
-
-resource "aws_route_table" "rt2" {
-  vpc_id = aws_vpc.vpc2.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw2.id
-  }
-}
-
-resource "aws_route_table_association" "rta2" {
-  subnet_id      = aws_subnet.subnet2.id
-  route_table_id = aws_route_table.rt2.id
-}
-
-resource "aws_security_group" "sg2" {
-  name        = "sg2"
-  description = "Allow SSH & ICMP from VPC1"
-  vpc_id      = aws_vpc.vpc2.id
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = -1
-    to_port     = -1
-    protocol    = "icmp"
-    cidr_blocks = [var.vpc1_cidr]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# VPC Peering
-resource "aws_vpc_peering_connection" "peer" {
-  vpc_id       = aws_vpc.vpc1.id
-  peer_vpc_id  = aws_vpc.vpc2.id
-  auto_accept  = true
-}
-
-resource "aws_route" "peer_route1" {
-  route_table_id             = aws_route_table.rt1.id
-  destination_cidr_block     = var.vpc2_cidr
-  vpc_peering_connection_id  = aws_vpc_peering_connection.peer.id
-}
-
-resource "aws_route" "peer_route2" {
-  route_table_id             = aws_route_table.rt2.id
-  destination_cidr_block     = var.vpc1_cidr
-  vpc_peering_connection_id  = aws_vpc_peering_connection.peer.id
-}
-
-# AMI
-data "aws_ami" "amazon_linux" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
-  }
-}
-
-# EC2 Instance in VPC1
-resource "aws_instance" "vm1" {
-  ami                         = data.aws_ami.amazon_linux.id
-  instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.subnet1.id
-  key_name                    = aws_key_pair.deployer_key.key_name
-  vpc_security_group_ids      = [aws_security_group.sg1.id]
-  associate_public_ip_address = true
-
-  tags = {
-    Name = "VM1"
-  }
-}
-
-# EC2 Instance in VPC2
-resource "aws_instance" "vm2" {
-  ami                         = data.aws_ami.amazon_linux.id
-  instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.subnet2.id
-  key_name                    = aws_key_pair.deployer_key.key_name
-  vpc_security_group_ids      = [aws_security_group.sg2.id]
-  associate_public_ip_address = true
-
-  tags = {
-    Name = "VM2"
-  }
-}
-```
----
-# outputs.tf
-```
-output "vm1_public_ip" {
-  value = aws_instance.vm1.public_ip
-}
-
-output "vm2_public_ip" {
-  value = aws_instance.vm2.public_ip
-}
-
-output "vm1_private_ip" {
-  value = aws_instance.vm1.private_ip
-}
-
-output "vm2_private_ip" {
-  value = aws_instance.vm2.private_ip
-}
-
-output "ssh_private_key_path" {
-  value = local_file.private_key.filename
-}
-```
----
-# variables.tf
-```
-variable "region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "instance_type" {
-  description = "EC2 instance type"
-  type        = string
-  default     = "t2.micro"
-}
-
-variable "vpc1_cidr" {
-  description = "CIDR block for VPC 1"
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
-variable "vpc2_cidr" {
-  description = "CIDR block for VPC 2"
-  type        = string
-  default     = "10.1.0.0/16"
-}
-
-variable "subnet1_cidr" {
-  description = "CIDR block for Subnet 1 (VPC1)"
-  type        = string
-  default     = "10.0.1.0/24"
-}
-
-variable "subnet2_cidr" {
-  description = "CIDR block for Subnet 2 (VPC2)"
-  type        = string
-  default     = "10.1.1.0/24"
-}
-
-variable "availability_zone" {
-  description = "Availability zone"
-  type        = string
-  default     = "us-east-1a"
-}
-
-variable "key_name" {
-  description = "Name for SSH key pair"
-  type        = string
-  default     = "key"
-}
-```
----
-```
-aws ec2 create-key-pair --key-name my-key --query 'KeyMaterial' --output text > my-key.pem
-chmod 400 my-key.pem
-```
-// copy files 
-```
-scp -i my-key.pem -r /Users/atul/Downloads/AWS-VPC-Peering-Project ec2-user@204.236.200.28:/home/ec2-user/
+# SSH to VM2 through public VM1, using the key only on your laptop:
+ssh -i key.pem -o IdentitiesOnly=yes -o 'ProxyCommand=ssh -i key.pem -o IdentitiesOnly=yes -W %h:%p ec2-user@'"${VM1_PUBLIC}" "ec2-user@$VM2_PRIVATE"
 ```
 
-## 🎯 **Objective:**
+You can also use `ssh -i key.pem -J ec2-user@"$VM1_PUBLIC" ec2-user@"$VM2_PRIVATE"` when your SSH agent offers the correct key to both hosts. Connectivity requires the SG rules and NACLs to permit traffic, and OS firewalls/services must allow the test. For private-to-private ping, the default NACL permits return traffic.
 
-To create a secure VPC peering connection between two different VPCs in the same AWS region and route traffic privately between their EC2 instances.
+Traffic path: `Laptop -> IGW-A -> VM1 (public IP) -> VPC-A route table -> pcx -> VPC-B route table -> VM2 (private IP)`. The VM1→VM2 hop does **not** pass through the Internet Gateway.
 
----
-
-## 🧩 **Use Case:**
-
-* **VPC-A**: Application server
-* **VPC-B**: Database server
-* Goal: Allow the app server in VPC-A to access the database in VPC-B over private IPs.
-
----
-
-## 🏗️ **Step-by-Step Setup Using AWS CLI**
-
-### 1️⃣ Create Two VPCs
+## Cleanup
 
 ```bash
-aws ec2 create-vpc --cidr-block 10.0.0.0/16 --tag-specifications \
-"ResourceType=vpc,Tags=[{Key=Name,Value=VPC-A}]"
-
-aws ec2 create-vpc --cidr-block 10.1.0.0/16 --tag-specifications \
-"ResourceType=vpc,Tags=[{Key=Name,Value=VPC-B}]"
+cd terraform                 # Only if currently at the repository root
+terraform destroy -var='admin_cidr=YOUR_PUBLIC_IPV4/32'
 ```
 
-### 2️⃣ Note the VPC IDs
+Do not manually delete resources before `terraform destroy`, or Terraform state may become inconsistent. Verify resource removal in AWS. EC2 and public IPv4 usage can incur costs.
 
-```bash
-aws ec2 describe-vpcs --query "Vpcs[*].{ID:VpcId,CIDR:CidrBlock}"
-```
+## Learning points
 
-### 3️⃣ Create Subnets in Both VPCs
+- VPC CIDRs must not overlap.
+- Peering becomes usable only after acceptance (`auto_accept = true` in this same-account/same-Region lab), route entries on both sides, and appropriate SG/NACL rules.
+- VPC peering is **not transitive** and does not support edge-to-edge routing through a peer's IGW or NAT gateway.
+- VPC peering is supported across AWS Regions and accounts, with additional acceptance/configuration steps.
+- Public IP addresses are not necessary for traffic over peering.
+- For background, see [Requirements](requirements.md), [VPC Notes](vpc.md), and [Historical connectivity test](terraform/connectivity-test-results.md). Historical results are **not** validation of the updated deployment.
 
-```bash
-aws ec2 create-subnet --vpc-id <vpc-a-id> --cidr-block 10.0.1.0/24
-aws ec2 create-subnet --vpc-id <vpc-b-id> --cidr-block 10.1.1.0/24
-```
+## Author
 
-### 4️⃣ Create VPC Peering Connection
-
-```bash
-aws ec2 create-vpc-peering-connection --vpc-id <vpc-a-id> \
---peer-vpc-id <vpc-b-id> --tag-specifications \
-"ResourceType=vpc-peering-connection,Tags=[{Key=Name,Value=VPC-A-B-Peering}]"
-```
-
-### 5️⃣ Accept the Peering Connection
-
-```bash
-aws ec2 describe-vpc-peering-connections
-
-aws ec2 accept-vpc-peering-connection --vpc-peering-connection-id <peering-connection-id>
-```
-
-### 6️⃣ Update Route Tables (One for Each VPC)
-
-```bash
-# Get route table IDs
-aws ec2 describe-route-tables --filters Name=vpc-id,Values=<vpc-a-id>
-aws ec2 describe-route-tables --filters Name=vpc-id,Values=<vpc-b-id>
-
-# Add routes
-aws ec2 create-route --route-table-id <route-table-a-id> \
---destination-cidr-block 10.1.0.0/16 --vpc-peering-connection-id <peering-connection-id>
-
-aws ec2 create-route --route-table-id <route-table-b-id> \
---destination-cidr-block 10.0.0.0/16 --vpc-peering-connection-id <peering-connection-id>
-```
-
----
-
-## 🚀 **Test Connectivity**
-
-### Deploy EC2 Instances in Both VPCs:
-
-```bash
-aws ec2 run-instances --image-id ami-0c02fb55956c7d316 \
---count 1 --instance-type t2.micro --key-name mykey \
---security-group-ids <sg-id> --subnet-id <subnet-id>
-```
-
-### Add SG Rules to Allow ICMP or SSH:
-
-```bash
-aws ec2 authorize-security-group-ingress \
---group-id <sg-id> --protocol icmp --port -1 --cidr 10.0.0.0/8
-```
-
-### From one EC2, ping the other EC2’s private IP:
-
-```bash
-ping <private-ip-of-peer-ec2>
-```
-
----
-
-## 🧼 **Clean Up**
-
-```bash
-aws ec2 delete-vpc-peering-connection --vpc-peering-connection-id <id>
-aws ec2 delete-vpc --vpc-id <vpc-a-id>
-aws ec2 delete-vpc --vpc-id <vpc-b-id>
-```
-
----
-
-## 📌 Diagram (Textual)
-
-```
-+----------------+      Peering      +----------------+
-|     VPC-A      | <---------------> |     VPC-B      |
-| 10.0.0.0/16    |                   | 10.1.0.0/16    |
-|   EC2-A        |                   |   EC2-B        |
-+----------------+                   +----------------+
-```
-
-## 👨‍💻 Author
-
-**Atul Kamble**
-
-- 💼 [LinkedIn](https://www.linkedin.com/in/atuljkamble)
-- 🐙 [GitHub](https://github.com/atulkamble)
-- 🐦 [X](https://x.com/Atul_Kamble)
-- 📷 [Instagram](https://www.instagram.com/atuljkamble)
-- 🌐 [Website](https://www.atulkamble.in)
+[Atul Kamble](https://github.com/atulkamble)
