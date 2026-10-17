@@ -104,8 +104,7 @@ Enable DNS resolution if accessing instances using private DNS names.
 Peering Options:
 
 ```text
-Enable DNS Resolution
-Enable DNS Hostnames
+Enable DNS support/hostnames on VPCs, then configure peering DNS-resolution options if resolving peer public hostnames to private IPs
 ```
 
 ---
@@ -153,11 +152,7 @@ VPC-B ↔ VPC-C
 VPC-A → VPC-C
 ```
 
-To connect multiple VPCs, use:
-
-* AWS Transit Gateway
-* VPN
-* Direct Connect
+For routing across multiple VPCs, consider AWS Transit Gateway or direct peering for each required pair. VPN / Direct Connect can connect to other networks, but do not make VPC peering transitive.
 
 ---
 
@@ -185,4 +180,4 @@ To connect multiple VPCs, use:
 3. Route table entries on both sides
 4. Security groups and NACLs allowing traffic
 
-Without any of these, connectivity between VPCs will fail.
+The required routes, security rules, and active peering must be present. Default NACLs allow traffic, but custom NACLs must allow both request and return flows.

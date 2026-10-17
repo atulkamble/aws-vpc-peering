@@ -1,19 +1,10 @@
-output "vm1_public_ip" {
-  value = aws_instance.vm1.public_ip
-}
-
-output "vm2_public_ip" {
-  value = aws_instance.vm2.public_ip
-}
-
-output "vm1_private_ip" {
-  value = aws_instance.vm1.private_ip
-}
-
-output "vm2_private_ip" {
-  value = aws_instance.vm2.private_ip
-}
-
-output "ssh_private_key_path" {
-  value = local_file.private_key.filename
-}
+output "vpc_a_id" { value = aws_vpc.vpc1.id }
+output "vpc_b_id" { value = aws_vpc.vpc2.id }
+output "peering_connection_id" { value = aws_vpc_peering_connection.peer.id }
+output "route_table_a_id" { value = aws_route_table.rt1.id }
+output "route_table_b_id" { value = aws_route_table.rt2.id }
+output "vm1_public_ip" { value = aws_instance.vm1.public_ip }
+output "vm1_private_ip" { value = aws_instance.vm1.private_ip }
+output "vm2_private_ip" { value = aws_instance.vm2.private_ip }
+output "vm2_public_ip" { value = aws_instance.vm2.public_ip }
+output "ssh_private_key_path" { value = local_sensitive_file.private_key.filename }
