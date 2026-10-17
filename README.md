@@ -41,6 +41,20 @@ flowchart LR
 | Internet/NAT sharing | Cannot use the peer's IGW or NAT Gateway through peering. | Private VM2 cannot reach the internet via VPC-A's IGW |
 | Peering quotas | Subject to AWS VPC peering quotas. | Check **Service Quotas → VPC peering connections per VPC** |
 
+### VPC CIDR Overlap Examples
+
+| VPC-A CIDR | VPC-B CIDR | Result | Reason |
+|---|---|---|---|
+| `10.0.0.0/16` | `10.1.0.0/16` | ✅ Allowed | Different, non-overlapping networks |
+| `10.0.0.0/16` | `172.16.0.0/16` | ✅ Allowed | Different, non-overlapping networks |
+| `10.0.0.0/16` | `10.0.0.0/16` | ❌ Not allowed | Exact matching CIDRs |
+| `10.0.0.0/16` | `10.0.1.0/24` | ❌ Not allowed | VPC-B is contained within VPC-A |
+| `10.0.1.0/24` | `10.0.0.0/16` | ❌ Not allowed | VPC-A is contained within VPC-B |
+| `10.0.1.0/24` | `10.0.2.0/24` | ✅ Allowed | Adjacent but non-overlapping networks |
+| `192.168.1.0/24` | `192.168.1.128/25` | ❌ Not allowed | Partial-range overlap (second is a subset) |
+
+**Rule:** VPC peering requires non-overlapping CIDR ranges. Matching CIDRs are overlapping, not a valid match. Check all associated IPv4 and IPv6 CIDRs on both VPCs.
+
 ## Prerequisites
 
 AWS CLI configured, Terraform 1.5+, SSH, AWS permissions, and your public IPv4 address.
