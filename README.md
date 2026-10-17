@@ -28,18 +28,18 @@ flowchart LR
 
 ## VPC Peering Conditions
 
-| Condition | Requirement |
-|---|---|
-| CIDR ranges | VPC IPv4 CIDR blocks must not overlap; overlapping IPv6 CIDRs also prevent peering. |
-| Peering status | The request must be accepted and the connection status must be `active`. |
-| Route tables | Add a route to the peer VPC CIDR through the peering connection in each participating subnet's route table. |
-| Security groups | Allow the required traffic between EC2 instances (for this lab: ICMP and SSH from VM1 to VM2). |
-| Network ACLs | Allow the required inbound and outbound traffic, including return traffic. |
-| DNS | Private IP connectivity works without DNS changes; enable peering DNS resolution if public DNS hostnames should resolve to private IPs across VPCs. |
-| Regions and accounts | Peering supports same-region, cross-region, same-account, and cross-account VPCs. |
-| Transitive routing | Not supported; a peer cannot route traffic through another VPC peering connection. |
-| Internet/NAT access | A peer VPC cannot use the other VPC's Internet Gateway or NAT Gateway through peering. |
-| Peering limits | A VPC has peering connection quotas; check AWS quotas before adding more connections. |
+| Condition | Requirement | Example |
+|---|---|---|
+| CIDR ranges | VPC CIDRs must not overlap (IPv4 or IPv6). | ✅ `10.0.0.0/16 ↔ 10.1.0.0/16`; ❌ `10.0.0.0/16 ↔ 10.0.1.0/24` |
+| Peering status | Request accepted; status `active`. | `pending-acceptance → active` |
+| Route tables | Each side needs a route to the peer CIDR via its peering ID. | VPC-A: `10.1.0.0/16 → pcx-xxxx`; VPC-B: `10.0.0.0/16 → pcx-xxxx` |
+| Security groups | Permit only required protocols and sources. | VM2 inbound SSH TCP 22 and ICMP from VM1 private IP `10.0.1.10/32` |
+| Network ACLs | Permit requests and return traffic in both directions. | Allow TCP 22 to VM2 and ephemeral response ports back to VM1 |
+| DNS | Optional for private-IP tests; enable DNS resolution options for peer public hostnames to resolve privately. | `ping 10.1.1.10` needs no DNS setting |
+| Regions/accounts | Same or different AWS regions/accounts supported. | `us-east-1 ↔ us-west-2` or Account A ↔ B |
+| Transitive routing | Peering does not provide transit through a third VPC. | A ↔ B and B ↔ C does **not** allow A ↔ C |
+| Internet/NAT sharing | Cannot use the peer's IGW or NAT Gateway through peering. | Private VM2 cannot reach the internet via VPC-A's IGW |
+| Peering quotas | Subject to AWS VPC peering quotas. | Check **Service Quotas → VPC peering connections per VPC** |
 
 ## Prerequisites
 
