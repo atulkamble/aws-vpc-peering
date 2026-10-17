@@ -6,35 +6,49 @@ Connect two AWS VPCs privately using **VPC Peering**, **EC2**, and **Terraform**
 
 ## 1. Architecture
 
-```text
-                     Your Laptop
-                         |
-                    SSH (TCP 22)
-                         |
-                      Internet
-                         |
-                Internet Gateway A
-                         |
-       +------------------------------------+
-       | VPC-A: 10.0.0.0/16                 |
-       | Public Subnet: 10.0.1.0/24         |
-       | EC2 VM1: Bastion / Jump Host       |
-       | Public IP + Private IP             |
-       +------------------------------------+
-                         |
-               VPC Peering (pcx)
-               Private traffic only
-                         |
-       +------------------------------------+
-       | VPC-B: 10.1.0.0/16                 |
-       | Private Subnet: 10.1.1.0/24        |
-       | EC2 VM2: Private Server            |
-       | Private IP only                    |
-       | No Internet Gateway or NAT         |
-       +------------------------------------+
+### Network architecture (Mermaid)
+
+```mermaid
+flowchart TB
+    User["Administrator Laptop"] -->|"SSH TCP 22 (restricted admin /32)"| Internet["Internet"]
+    Internet --> IGW["Internet Gateway A"]
+
+    subgraph A["VPC-A · 10.0.0.0/16"]
+        direction TB
+        Public["Public Subnet · 10.0.1.0/24"]
+        VM1["EC2 VM1 · Bastion Host<br/>Public + Private IPv4"]
+        RTA["Route Table A<br/>0.0.0.0/0 → IGW<br/>10.1.0.0/16 → Peering"]
+        Public --- VM1
+        Public --- RTA
+    end
+
+    subgraph B["VPC-B · 10.1.0.0/16"]
+        direction TB
+        Private["Private Subnet · 10.1.1.0/24"]
+        VM2["EC2 VM2 · Private Server<br/>Private IPv4 only"]
+        RTB["Route Table B<br/>10.0.0.0/16 → Peering<br/>No Internet default route"]
+        Private --- VM2
+        Private --- RTB
+    end
+
+    IGW --> Public
+    VM1 <-->|"Private IPv4 via pcx"| Peer["VPC Peering Connection"]
+    Peer <--> VM2
 ```
 
-**Important:** VM1-to-VM2 traffic uses private IPs over the peering connection, **not the Internet Gateway**.
+### Traffic flow
+
+```mermaid
+flowchart LR
+    Laptop["Laptop"] -->|"Public SSH"| IGW["IGW-A"]
+    IGW --> Bastion["VM1 (VPC-A)"]
+    Bastion -->|"10.1.0.0/16"| RouteA["Route Table A"]
+    RouteA --> PCX["Peering pcx"]
+    PCX --> RouteB["Route Table B"]
+    RouteB -->|"Private IP"| VM2["VM2 (VPC-B)"]
+```
+
+**Key points:** Only VM1 has a public IPv4 address. VM2 is private and has no direct Internet Gateway or NAT route. VPC peering carries **private traffic** between the VPCs; the Internet Gateway is used only for reaching VM1 from the administrator's laptop. Route tables, security groups, and network ACLs must allow the traffic.
 
 ## 2. Resources Created
 
