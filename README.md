@@ -1,104 +1,206 @@
-# AWS VPC Peering Project
+# AWS VPC Peering — Hands-on Project
 
-Hands-on AWS VPC peering between two non-overlapping VPCs in the **same AWS Region**, deployed using Terraform.
+Connect two AWS VPCs privately using **VPC Peering**, **EC2**, and **Terraform**.
 
-## Architecture
+> **Learning objective:** Access a private EC2 instance in VPC-B from a public EC2 jump host in VPC-A, using private IP networking.
+
+## 1. Architecture
 
 ```text
-Administrator (SSH via public IP; restricted to admin_cidr)
-                     |
-                  Internet
-                     |
-                  IGW-A
-                     |
-VPC-A: 10.0.0.0/16   |        Peering (pcx)       VPC-B: 10.1.0.0/16
-+----------------------------+                  +----------------------------+
-| Public subnet 10.0.1.0/24  |                  | Private subnet 10.1.1.0/24 |
-| VM1 Bastion (public IP)    |<--- private ---> | VM2 EC2 (private IP only)  |
-| RT: 0.0.0.0/0 -> IGW       |                  | RT: 10.0.0.0/16 -> pcx     |
-| RT: 10.1.0.0/16 -> pcx     |                  | No IGW/NAT default route   |
-+----------------------------+                  +----------------------------+
+                     Your Laptop
+                         |
+                    SSH (TCP 22)
+                         |
+                      Internet
+                         |
+                Internet Gateway A
+                         |
+       +------------------------------------+
+       | VPC-A: 10.0.0.0/16                 |
+       | Public Subnet: 10.0.1.0/24         |
+       | EC2 VM1: Bastion / Jump Host       |
+       | Public IP + Private IP             |
+       +------------------------------------+
+                         |
+               VPC Peering (pcx)
+               Private traffic only
+                         |
+       +------------------------------------+
+       | VPC-B: 10.1.0.0/16                 |
+       | Private Subnet: 10.1.1.0/24        |
+       | EC2 VM2: Private Server            |
+       | Private IP only                    |
+       | No Internet Gateway or NAT         |
+       +------------------------------------+
 ```
 
-**Goal:** SSH to VM1 using its public IP, then test ping/SSH from VM1 to VM2 using VM2's **private IP** over the VPC peering connection.
+**Important:** VM1-to-VM2 traffic uses private IPs over the peering connection, **not the Internet Gateway**.
 
-## Prerequisites
+## 2. Resources Created
 
-- AWS account, AWS CLI, Terraform >= 1.5, and SSH.
-- IAM permissions to provision EC2, VPC networking, security groups, and an EC2 key pair.
-- Region `us-east-1` and AZ `us-east-1a` (edit `terraform/variables.tf` if required).
-- Two non-overlapping VPC CIDRs: `10.0.0.0/16` and `10.1.0.0/16`.
-- A unique EC2 `key_name` for this lab.
-- Your own public IPv4 address as `admin_cidr` with `/32` (do not permit `0.0.0.0/0`).
+| Resource | VPC-A | VPC-B |
+|---|---|---|
+| VPC CIDR | `10.0.0.0/16` | `10.1.0.0/16` |
+| Subnet CIDR | `10.0.1.0/24` | `10.1.1.0/24` |
+| EC2 | VM1 (public bastion) | VM2 (private server) |
+| Public IP | Yes | No |
+| Internet Gateway | Yes | No |
+| Route to peer | `10.1.0.0/16 → pcx` | `10.0.0.0/16 → pcx` |
+| Default internet route | `0.0.0.0/0 → IGW` | None |
 
-## Deploy
+## 3. Prerequisites
+
+- AWS account with EC2/VPC permissions.
+- AWS CLI configured (`aws configure` or an existing AWS profile).
+- Terraform 1.5+ and SSH installed.
+- Your **public IPv4 address/32** for secure SSH access.
+- Default region: `us-east-1`; default AZ: `us-east-1a`.
+- A unique EC2 key-pair name (default: `vpc-peering-lab-key`).
+
+## 4. Deploy with Terraform
+
+**Step 1 — Clone the project**
 
 ```bash
 git clone https://github.com/atulkamble/aws-vpc-peering.git
 cd aws-vpc-peering/terraform
+```
+
+**Step 2 — Check prerequisites**
+
+```bash
 aws sts get-caller-identity
+terraform version
+```
+
+**Step 3 — Initialize and validate**
+
+```bash
 terraform init
 terraform fmt -check
 terraform validate
-
-# Replace with YOUR current public IPv4 /32, not a placeholder:
-terraform plan -var='admin_cidr=YOUR_PUBLIC_IPV4/32'
-terraform apply -var='admin_cidr=YOUR_PUBLIC_IPV4/32'
 ```
 
-Terraform provisions VPC-A, VPC-B, subnets, one IGW (A only), subnet route tables, a same-account/same-Region peering connection, restrictive security groups, and two Amazon Linux 2023 EC2 instances. **VM2 has no public IP.**
+**Step 4 — Set your public IPv4 address**
 
-> The generated `key.pem` and Terraform state contain sensitive private-key material. They must never be committed, uploaded, or shared. For production prefer SSM Session Manager / EC2 Instance Connect Endpoint and externally managed keys.
+Replace `YOUR_PUBLIC_IP` with your actual public IPv4 address. Example format: `203.0.113.10/32` (documentation example only).
 
-## Verify AWS resources
+```bash
+export ADMIN_CIDR="YOUR_PUBLIC_IP/32"
+```
+
+**Step 5 — Plan and apply**
+
+```bash
+terraform plan -var="admin_cidr=$ADMIN_CIDR"
+terraform apply -var="admin_cidr=$ADMIN_CIDR"
+```
+
+Type `yes` when prompted. AWS may charge for EC2 instances and public IPv4 addresses.
+
+## 5. Verify Infrastructure
 
 ```bash
 terraform output
-aws ec2 describe-vpc-peering-connections --vpc-peering-connection-ids "$(terraform output -raw peering_connection_id)" --query 'VpcPeeringConnections[*].Status.Code'
-aws ec2 describe-route-tables --route-table-ids "$(terraform output -raw route_table_a_id)" "$(terraform output -raw route_table_b_id)" --query 'RouteTables[*].Routes[*].{Destination:DestinationCidrBlock,Gateway:GatewayId,Peering:VpcPeeringConnectionId,State:State}' --output json
 ```
 
-Expected peering status: `active`. VPC-A must route `10.1.0.0/16` through peering; VPC-B must route `10.0.0.0/16` through peering. VPC-B has no `0.0.0.0/0` route.
+Expected outputs include `vm1_public_ip`, `vm1_private_ip`, `vm2_private_ip`, `peering_connection_id`, and route-table IDs.
 
-## Connectivity tests
-
-Use the local key file and **ProxyJump** so no private key is copied onto VM1.
+**Check peering status**
 
 ```bash
-cd terraform                 # Only if currently at the repository root
+aws ec2 describe-vpc-peering-connections \
+  --vpc-peering-connection-ids "$(terraform output -raw peering_connection_id)" \
+  --query 'VpcPeeringConnections[*].Status.Code'
+```
+
+Expected: `active`.
+
+**Check routes on both sides**
+
+```bash
+aws ec2 describe-route-tables \
+  --route-table-ids "$(terraform output -raw route_table_a_id)" "$(terraform output -raw route_table_b_id)" \
+  --query 'RouteTables[*].Routes[*].{Destination:DestinationCidrBlock,Gateway:GatewayId,Peering:VpcPeeringConnectionId}' \
+  --output json
+```
+
+## 6. Test Private Connectivity
+
+Run from the **terraform directory** on your laptop:
+
+```bash
 chmod 400 key.pem
 VM1_PUBLIC=$(terraform output -raw vm1_public_ip)
 VM2_PRIVATE=$(terraform output -raw vm2_private_ip)
-
-# Test ICMP from VM1 to private VM2:
-ssh -i key.pem -o IdentitiesOnly=yes "ec2-user@$VM1_PUBLIC" "ping -c 3 $VM2_PRIVATE"
-
-# SSH to VM2 through public VM1, using the key only on your laptop:
-ssh -i key.pem -o IdentitiesOnly=yes -o 'ProxyCommand=ssh -i key.pem -o IdentitiesOnly=yes -W %h:%p ec2-user@'"${VM1_PUBLIC}" "ec2-user@$VM2_PRIVATE"
 ```
 
-You can also use `ssh -i key.pem -J ec2-user@"$VM1_PUBLIC" ec2-user@"$VM2_PRIVATE"` when your SSH agent offers the correct key to both hosts. Connectivity requires the SG rules and NACLs to permit traffic, and OS firewalls/services must allow the test. For private-to-private ping, the default NACL permits return traffic.
-
-Traffic path: `Laptop -> IGW-A -> VM1 (public IP) -> VPC-A route table -> pcx -> VPC-B route table -> VM2 (private IP)`. The VM1→VM2 hop does **not** pass through the Internet Gateway.
-
-## Cleanup
+**Test A — SSH to public VM1**
 
 ```bash
-cd terraform                 # Only if currently at the repository root
-terraform destroy -var='admin_cidr=YOUR_PUBLIC_IPV4/32'
+ssh -i key.pem ec2-user@"$VM1_PUBLIC"
 ```
 
-Do not manually delete resources before `terraform destroy`, or Terraform state may become inconsistent. Verify resource removal in AWS. EC2 and public IPv4 usage can incur costs.
+Exit VM1 with `exit`.
 
-## Learning points
+**Test B — Ping private VM2 from VM1**
 
-- VPC CIDRs must not overlap.
-- Peering becomes usable only after acceptance (`auto_accept = true` in this same-account/same-Region lab), route entries on both sides, and appropriate SG/NACL rules.
-- VPC peering is **not transitive** and does not support edge-to-edge routing through a peer's IGW or NAT gateway.
-- VPC peering is supported across AWS Regions and accounts, with additional acceptance/configuration steps.
-- Public IP addresses are not necessary for traffic over peering.
-- For background, see [Requirements](requirements.md), [VPC Notes](vpc.md), and [Historical connectivity test](terraform/connectivity-test-results.md). Historical results are **not** validation of the updated deployment.
+```bash
+ssh -i key.pem ec2-user@"$VM1_PUBLIC" "ping -c 3 $VM2_PRIVATE"
+```
 
-## Author
+Expected: Ping replies with 0% packet loss, assuming the instances and network rules are healthy.
 
-[Atul Kamble](https://github.com/atulkamble)
+**Test C — SSH to private VM2 through VM1**
+
+```bash
+ssh -i key.pem -o IdentitiesOnly=yes \
+  -o "ProxyCommand=ssh -i key.pem -o IdentitiesOnly=yes -W %h:%p ec2-user@$VM1_PUBLIC" \
+  ec2-user@"$VM2_PRIVATE"
+```
+
+Expected: An SSH shell on VM2. This approach **does not copy the private key to VM1**.
+
+## 7. Troubleshooting
+
+| Problem | What to check |
+|---|---|
+| `Permission denied (publickey)` | Correct `key.pem`, permissions (`chmod 400`), `ec2-user` |
+| SSH to VM1 times out | Your `ADMIN_CIDR`, VM1 public IP, IGW route, security group |
+| VM1 cannot ping VM2 | Peering is `active`, both routes, ICMP security rules, NACLs |
+| VM2 SSH times out | VM2 security group TCP 22 from VPC-A, routing, NACLs |
+| VM2 has no internet | Expected: VPC-B has no NAT/IGW route |
+
+## 8. Cleanup
+
+From the `terraform` directory:
+
+```bash
+terraform destroy -var="admin_cidr=$ADMIN_CIDR"
+```
+
+Type `yes` to confirm. Check that resources have been removed to avoid ongoing charges.
+
+## 9. Points to Remember
+
+1. VPC CIDR ranges must **not overlap**.
+2. Peering must be **active**.
+3. Add routes in **both VPCs**.
+4. Security groups and NACLs must permit required traffic.
+5. VPC peering does **not** provide transitive routing.
+6. VPC peering can connect VPCs across accounts and Regions.
+7. Peering does not provide internet access through another VPC's Internet Gateway.
+
+**Security note:** The lab creates an SSH private key in `terraform/key.pem` and Terraform state. Do not commit or share either. Use secure state storage and managed access methods for production.
+
+## 10. More Information
+
+- [Terraform source code](terraform/)
+- [VPC Peering requirements](requirements.md)
+- [VPC fundamentals](vpc.md)
+- [Historical connectivity test results](terraform/connectivity-test-results.md) — previous test, **not** verification of this updated version
+- [AWS VPC Peering documentation](https://docs.aws.amazon.com/vpc/latest/peering/what-is-vpc-peering.html)
+
+---
+
+**Author:** [Atul Kamble](https://github.com/atulkamble)
