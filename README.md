@@ -26,6 +26,21 @@ flowchart LR
 | Peering route | `10.1.0.0/16 → pcx` | `10.0.0.0/16 → pcx` |
 | Internet route | `0.0.0.0/0 → IGW` | None |
 
+## VPC Peering Conditions
+
+| Condition | Requirement |
+|---|---|
+| CIDR ranges | VPC IPv4 CIDR blocks must not overlap; overlapping IPv6 CIDRs also prevent peering. |
+| Peering status | The request must be accepted and the connection status must be `active`. |
+| Route tables | Add a route to the peer VPC CIDR through the peering connection in each participating subnet's route table. |
+| Security groups | Allow the required traffic between EC2 instances (for this lab: ICMP and SSH from VM1 to VM2). |
+| Network ACLs | Allow the required inbound and outbound traffic, including return traffic. |
+| DNS | Private IP connectivity works without DNS changes; enable peering DNS resolution if public DNS hostnames should resolve to private IPs across VPCs. |
+| Regions and accounts | Peering supports same-region, cross-region, same-account, and cross-account VPCs. |
+| Transitive routing | Not supported; a peer cannot route traffic through another VPC peering connection. |
+| Internet/NAT access | A peer VPC cannot use the other VPC's Internet Gateway or NAT Gateway through peering. |
+| Peering limits | A VPC has peering connection quotas; check AWS quotas before adding more connections. |
+
 ## Prerequisites
 
 AWS CLI configured, Terraform 1.5+, SSH, AWS permissions, and your public IPv4 address.
